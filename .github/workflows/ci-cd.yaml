@@ -1,0 +1,164 @@
+name: CI/CD - CloudMaven DevOps Assessment
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+env:
+  TF_WORKING_DIR: terraform
+  K8S_MANIFEST_DIR: k8s
+  K8S_NAMESPACE: cloudmaven
+  DOCKERHUB_USERNAME: imrannadaf
+  BACKEND_IMAGE_NAME: devops-backend
+  FRONTEND_IMAGE_NAME: devops-frontend
+
+jobs:
+  ci:
+    name: CI - Validate Terraform, Docker, K8s
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ---------- Terraform Validate ----------
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform fmt -check
+
+      - name: Terraform init (local, no backend)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      # ---------- Docker build test (no push) ----------
+      - name: Test build backend Docker image
+        run: docker build -t backend-ci-test ./app/backend
+
+      - name: Test build frontend Docker image
+        run: docker build -t frontend-ci-test ./app/frontend
+
+      # ---------- Kubernetes YAML lint (kubeval) ----------
+      - name: Install kubeval
+        run: |
+          curl -sSL https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz \
+            | tar -xz
+          sudo mv kubeval /usr/local/bin/kubeval
+
+      - name: Lint Kubernetes manifests
+        run: |
+          find ${{ env.K8S_MANIFEST_DIR }} -name '*.yaml' -print0 | \
+          xargs -0 -n1 kubeval --strict --ignore-missing-schemas
+
+      # ---------- Upload artifacts for reference ----------
+      - name: Upload Terraform config
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-config
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: Upload Kubernetes manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-manifests
+          path: ${{ env.K8S_MANIFEST_DIR }}
+
+  cd:
+    name: CD - Deploy to AKS
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ---------- Azure Login ----------
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: cloudmaven-devops-rg
+          cluster-name: cloudmaven-devops-aks
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      # ---------- Terraform Plan ----------
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform init (with backend)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out=tfplan.out
+
+      # ---------- Docker Build & Push ----------
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build & push backend image
+        run: |
+          BACKEND_IMAGE=${{ env.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> $GITHUB_ENV
+
+          docker build -t $BACKEND_IMAGE ./app/backend
+          docker push $BACKEND_IMAGE
+
+      - name: Build & push frontend image
+        run: |
+          FRONTEND_IMAGE=${{ env.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+          echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> $GITHUB_ENV
+
+          docker build -t $FRONTEND_IMAGE ./app/frontend
+          docker push $FRONTEND_IMAGE
+
+      # ---------- Kubernetes Deploy ----------
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -R -f ${{ env.K8S_MANIFEST_DIR }}
+
+
+
+      - name: Update deployments with new images
+        run: |
+          kubectl set image deployment/backend \
+            backend=${{ env.BACKEND_IMAGE }} \
+            -n ${{ env.K8S_NAMESPACE }}
+
+          kubectl set image deployment/frontend \
+            frontend=${{ env.FRONTEND_IMAGE }} \
+            -n ${{ env.K8S_NAMESPACE }}
+
+      - name: Wait for rollout to complete
+        run: |
+          kubectl rollout status deployment/backend -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+          kubectl rollout status deployment/frontend -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+
+      # ---------- Smoke Test API (/api/health) ----------
+      - name: Smoke test backend API health
+        run: |
+          kubectl run smoke-test --namespace ${{ env.K8S_NAMESPACE }} \
+            --image=busybox:1.28 --restart=Never --command -- \
+            sh -c "wget -qO- http://backend:5000/api/health | grep 'ok'"
+
+          kubectl delete pod smoke-test -n ${{ env.K8S_NAMESPACE }} || true
