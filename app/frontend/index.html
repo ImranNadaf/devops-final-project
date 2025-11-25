@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CloudMaven DevOps Assessment, Imran Nadaf</title>
+  </head>
+  <body>
+    <h1>CloudMaven DevOps Assessment - Frontend</h1>
+    <p id="status">Checking backend...</p>
+
+    <script>
+      // In Kubernetes via Ingress, /api will route to backend
+      fetch("/api/hello")
+        .then((res) => res.json())
+        .then((data) => {
+          document.getElementById("status").innerText =
+            "Backend response: " + data.message;
+        })
+        .catch((err) => {
+          document.getElementById("status").innerText =
+            "Error calling backend: " + err;
+        });
+    </script>
+  </body>
+</html>
