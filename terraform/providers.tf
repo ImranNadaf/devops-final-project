@@ -9,8 +9,8 @@ terraform {
   }
 
   backend "azurerm" {
-    resource_group_name  = "test26"           
-    storage_account_name = "imranstorage26"   
+    resource_group_name  = "test26"
+    storage_account_name = "imranstorage26"
     container_name       = "imrancontainer26"
     key                  = "cloudmaven-devops-assessment.tfstate"
   }
