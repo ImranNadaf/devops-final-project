@@ -141,7 +141,7 @@ jobs:
       # ---------- Kubernetes Deploy ----------
       - name: Apply Kubernetes manifests
         run: |
-          kubectl apply -R -f ${{ env.K8S_MANIFEST_DIR }}
+          kubectl apply -R -f ${{ env.K8S_MANIFEST_DIR }}/app
 
 
 
