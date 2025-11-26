@@ -54,10 +54,6 @@ def after_request(response):
     return response
 
 
-# ============================================================
-# ✅ FIX: SUPPORT BOTH /api/health AND /health
-# ============================================================
-
 @app.route("/api/health", methods=["GET"])
 def api_health():
     return jsonify({"status": "ok"}), 200
@@ -68,9 +64,7 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
-# ============================================================
 # Existing working routes
-# ============================================================
 
 @app.route("/metrics", methods=["GET"])
 def metrics():

@@ -1,8 +1,8 @@
 ## CI/CD Pipeline Explanation (GitHub Actions)
 
-Your project uses a 2-stage CI/CD pipeline implemented using GitHub Actions.
+This project uses a 2-stage CI/CD pipeline implemented using GitHub Actions.
 
-This pipeline ensures that your code is validated, built, containerized, and deployed automatically to the AKS cluster whenever changes are pushed to the main branch.
+This pipeline ensures that our code is validated, built, containerized, and deployed automatically to the AKS cluster whenever changes are pushed to the main branch.
 
 ## 🚀 Pipeline Overview
 
@@ -114,9 +114,6 @@ azure/aks-set-context@v4
 
  ✔ Assures infra did not accidentally change
 
- ✔ Meets CloudMaven evaluation requirement
-
- (CD does NOT run terraform apply — safe practice)
 
 ### 4. Build & Push Docker Images
 
@@ -142,7 +139,7 @@ Both images are built and pushed to Docker Hub with unique Git SHA tags:
 
  ✔ Deploys ingress
 
-(You intentionally excluded monitoring manifests to avoid CRD errors.)
+(I intentionally excluded monitoring manifests to avoid CRD errors.)
 
 ### 6. Update Deployments with New Image Tags
 

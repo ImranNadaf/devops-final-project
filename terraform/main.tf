@@ -1,16 +1,12 @@
 data "azurerm_client_config" "current" {}
 
-# ----------------------------------------------------
-# Resource Group
-# ----------------------------------------------------
+
 resource "azurerm_resource_group" "rg" {
   name     = "${var.prefix}-rg"
   location = var.location
 }
 
-# ----------------------------------------------------
 # Network Module
-# ----------------------------------------------------
 module "network" {
   source                = "./modules/network"
   resource_group_name   = azurerm_resource_group.rg.name
@@ -21,9 +17,9 @@ module "network" {
   prefix                = var.prefix
 }
 
-# ----------------------------------------------------
+
 # AKS Cluster
-# ----------------------------------------------------
+
 resource "azurerm_kubernetes_cluster" "aks" {
   name                = "${var.prefix}-aks"
   location            = azurerm_resource_group.rg.location
@@ -43,7 +39,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
     type = "SystemAssigned"
   }
 
-  # FIXED: Service CIDR conflict
+  # Service CIDR conflict
   network_profile {
     network_plugin    = "azure"
     load_balancer_sku = "standard"
